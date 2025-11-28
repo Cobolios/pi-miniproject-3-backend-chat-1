@@ -12,10 +12,10 @@ dotenv.config();
 
 /**
  * Path to the Firebase service account key file.
- * Uses process.cwd() to locate the file relative to the project root,
- * ensuring it works for both source and compiled output (dist).
+ * Prioritizes environment variable FIREBASE_SERVICE_ACCOUNT_KEY_PATH for production (Render).
+ * Fallbacks to local relative path for development.
  */
-const serviceAccountPath = path.join(process.cwd(), 'api/config/serviceAccountKey.json');
+const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_KEY_PATH || path.join(process.cwd(), 'api/config/serviceAccountKey.json');
 
 // Initialize Firebase Admin SDK
 try {
