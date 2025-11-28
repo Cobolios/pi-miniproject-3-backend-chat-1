@@ -15,10 +15,16 @@ dotenv.config();
 const app = express();
 const port = process.env.PORT || 3001; // Sprint 2: 2 servers (user and chat). Assuming chat uses a different port or deployed separately.
 
+// Parse CORS origins from environment variable or default to '*'
+const allowedOrigins = process.env.CORS_ORIGIN 
+  ? process.env.CORS_ORIGIN.split(',') 
+  : '*';
+
 // Middleware
 app.use(cors({
-  origin: '*', // Allow all origins for development/Sprint 2. Should be restricted in production.
+  origin: allowedOrigins,
   methods: ['GET', 'POST'],
+  credentials: true
 }));
 app.use(express.json());
 
@@ -33,8 +39,9 @@ const server = http.createServer(app);
 // Initialize Socket.io
 const io = new Server(server, {
   cors: {
-    origin: '*', // Allow the frontend to connect
+    origin: allowedOrigins,
     methods: ['GET', 'POST'],
+    credentials: true
   },
 });
 
