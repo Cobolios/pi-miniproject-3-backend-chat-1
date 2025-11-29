@@ -6,6 +6,7 @@
 import * as admin from 'firebase-admin';
 import { ServiceAccount } from 'firebase-admin';
 import path from 'path';
+import fs from 'fs';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -17,10 +18,16 @@ dotenv.config();
  */
 const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_KEY_PATH || path.join(process.cwd(), 'api/config/serviceAccountKey.json');
 
+console.log(`Attempting to load Firebase credentials from: ${serviceAccountPath}`);
+
 // Initialize Firebase Admin SDK
 try {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const serviceAccount = require(serviceAccountPath) as ServiceAccount;
+  if (!fs.existsSync(serviceAccountPath)) {
+    throw new Error(`Service account file not found at: ${serviceAccountPath}`);
+  }
+
+  const serviceAccountRaw = fs.readFileSync(serviceAccountPath, 'utf8');
+  const serviceAccount = JSON.parse(serviceAccountRaw) as ServiceAccount;
 
   if (!admin.apps.length) {
     admin.initializeApp({
@@ -29,8 +36,12 @@ try {
     console.log('Firebase Admin initialized successfully.');
   }
 } catch (error) {
-  console.error('Error initializing Firebase Admin:', error);
-  // Proceeding without initialization might cause errors later if auth is required
+  console.error('CRITICAL ERROR: Failed to initialize Firebase Admin.');
+  console.error(error);
+  // Exit process because the server cannot function without authentication
+  if (process.env.NODE_ENV === 'production') {
+     process.exit(1); 
+  }
 }
 
 /**
@@ -41,6 +52,10 @@ try {
  */
 export const verifyToken = async (token: string): Promise<admin.auth.DecodedIdToken> => {
   try {
+    // Ensure app is initialized before verification
+    if (!admin.apps.length) {
+      throw new Error('Firebase Admin not initialized');
+    }
     const decodedToken = await admin.auth().verifyIdToken(token);
     return decodedToken;
   } catch (error) {
@@ -48,4 +63,3 @@ export const verifyToken = async (token: string): Promise<admin.auth.DecodedIdTo
     throw new Error('Unauthorized: Invalid token');
   }
 };
-
