@@ -4,6 +4,7 @@
  */
 
 import { Server, Socket } from 'socket.io';
+import * as admin from 'firebase-admin';
 import { verifyToken } from '../middleware/auth';
 
 /**
@@ -89,15 +90,17 @@ export const initializeSocket = (io: Server): void => {
 
     /**
      * Handle 'send-message' event.
-     * Broadcasts the message to all users in the room (including sender if needed, usually sender displays their own immediately, but broadcast is simpler).
-     * Requirements: "Socket.io emite mensajes a todos los conectados."
+     * Broadcasts the message to all users in the room and saves it to Firestore.
+     * Requirements: 
+     * 1. Socket.io emits to all connected.
+     * 2. Save to Firestore for transcription/evidence.
      */
-    socket.on('send-message', ({ roomId, message }: SendMessagePayload) => {
+    socket.on('send-message', async ({ roomId, message }: SendMessagePayload) => {
       if (!roomId || !message) {
         return;
       }
 
-      const timestamp = new Date().toISOString();
+      const timestampISO = new Date().toISOString();
       const senderName = socket.user?.name || 'Unknown';
       const senderId = socket.user?.uid;
 
@@ -106,12 +109,34 @@ export const initializeSocket = (io: Server): void => {
         message,
         senderId,
         senderName,
-        timestamp,
+        timestamp: timestampISO,
       };
 
-      // Emit to all in the room including sender
+      // 1. Real-time Emission (Priority: High)
+      // Emit immediately so users see the message without waiting for DB
       io.to(roomId).emit('receive-message', messageData);
       console.log(`Message sent to room ${roomId}: ${message}`);
+
+      // 2. Persistence in Firestore (Priority: Medium - Async)
+      // Saves the message for transcription/history (US-15)
+      try {
+        await admin.firestore()
+          .collection('meetings')
+          .doc(roomId)
+          .collection('chatMessages')
+          .add({
+            senderId: senderId,
+            senderName: senderName,
+            content: message, // Mapped to 'content' as requested
+            timestamp: admin.firestore.FieldValue.serverTimestamp(), // Server timestamp for sorting
+            meetingId: roomId,
+            createdAt: timestampISO // Storing ISO string as backup/reference
+          });
+          
+      } catch (error) {
+        // Log error but don't crash the socket connection
+        console.error(`Error saving message to Firestore for room ${roomId}:`, error);
+      }
     });
 
     /**
@@ -122,4 +147,3 @@ export const initializeSocket = (io: Server): void => {
     });
   });
 };
-
